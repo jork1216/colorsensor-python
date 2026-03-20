@@ -25,6 +25,7 @@ from models import AS_COLS
 from storage import apply_session_name
 from color_utils import pkt_to_rgb
 from theme import banner_style_healthy, banner_style_mild_stress, banner_style_stressed
+from theme import delta_box_style_active, delta_box_style_muted
 from widgets.metric_card import MetricCard, metric_badge_style
 from widgets.history_table import HistoryTable
 
@@ -130,9 +131,24 @@ class LiveTab(QWidget):
         """)
         root.addWidget(self.overall_banner)
 
-        cards_row = QHBoxLayout()
+        cards_container = QWidget()
+        cards_container.setObjectName("cards_container")
+        cards_container.setStyleSheet("""
+            QWidget#cards_container {
+                background-color: #0a3d1f;
+                border-left: 1px solid #166534;
+                border-right: 1px solid #166534;
+                border-bottom: 1px solid #166534;
+                border-top: none;
+                border-bottom-left-radius: 14px;
+                border-bottom-right-radius: 14px;
+            }
+        """)
+
+        cards_row = QHBoxLayout(cards_container)
         cards_row.setSpacing(0)
-        root.addLayout(cards_row)
+        cards_row.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(cards_container)
 
         self.card_chl = MetricCard("CHLOROPHYLL INDEX", "F8(680nm) / F2(445nm)")
         self.card_car = MetricCard("CAR:CHL RATIO", "F3(480nm) / F8(680nm)")
@@ -274,6 +290,7 @@ class LiveTab(QWidget):
             card.baseline.setText("Baseline: —")
             card.delta.setText("— from baseline")
             card.badge.setStyleSheet(metric_badge_style("UNKNOWN"))
+            card.delta.setStyleSheet(delta_box_style_muted())
 
         self.live_history_table.setRowCount(0)
         self.live_history_count.setText("0 snaps recorded")
@@ -376,17 +393,9 @@ class LiveTab(QWidget):
             card.delta.setText(fmt_delta_line(delta_value))
 
             if delta_value is None or pd.isna(delta_value):
-                card.delta.setStyleSheet("""
-                    color: #9ca3af;
-                    font-size: 13px;
-                    font-weight: 700;
-                """)
+                card.delta.setStyleSheet(delta_box_style_muted())
             else:
-                card.delta.setStyleSheet("""
-                    color: #86efac;
-                    font-size: 13px;
-                    font-weight: 700;
-                """)
+                card.delta.setStyleSheet(delta_box_style_active())
 
         overall_text = str(overall).upper()
         self.overall_banner.setText(f"●  Overall Status: {overall_text}")

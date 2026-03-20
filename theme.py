@@ -24,8 +24,8 @@ TEXT_MUTED = "#9ca3af"
 def badge_style_healthy() -> str:
     """Returns the green badge style for healthy status"""
     return """
-        padding: 4px 12px;
-        border: 1px solid {border};
+        padding: 4px 14px;
+        border: 2px solid {border};
         border-radius: 8px;
         color: {text};
         background-color: transparent;
@@ -37,8 +37,8 @@ def badge_style_healthy() -> str:
 def badge_style_mild_stress() -> str:
     """Returns the yellow badge style for mild stress / warning status"""
     return """
-        padding: 4px 12px;
-        border: 1px solid {border};
+        padding: 4px 14px;
+        border: 2px solid {border};
         border-radius: 8px;
         color: {text};
         background-color: transparent;
@@ -50,8 +50,8 @@ def badge_style_mild_stress() -> str:
 def badge_style_stressed() -> str:
     """Returns the red badge style for stressed / critical status"""
     return """
-        padding: 4px 12px;
-        border: 1px solid {border};
+        padding: 4px 14px;
+        border: 2px solid {border};
         border-radius: 8px;
         color: {text};
         background-color: transparent;
@@ -63,12 +63,38 @@ def badge_style_stressed() -> str:
 def badge_style_unknown() -> str:
     """Returns the grey badge style for unknown status"""
     return """
-        padding: 4px 12px;
-        border: 1px solid #374151;
+        padding: 4px 14px;
+        border: 2px solid #374151;
         border-radius: 8px;
         color: #d1d5db;
         background-color: transparent;
         font-size: 14px;
+        font-weight: 700;
+    """
+
+
+def delta_box_style_active() -> str:
+    """Returns the delta pill/box style for a valid (active) delta value"""
+    return """
+        background-color: #052e16;
+        border: 1px solid #166534;
+        border-radius: 6px;
+        padding: 3px 8px;
+        color: #86efac;
+        font-size: 13px;
+        font-weight: 700;
+    """
+
+
+def delta_box_style_muted() -> str:
+    """Returns the delta pill/box style for a missing/NaN delta value"""
+    return """
+        background-color: #052e16;
+        border: 1px solid #166534;
+        border-radius: 6px;
+        padding: 3px 8px;
+        color: #9ca3af;
+        font-size: 13px;
         font-weight: 700;
     """
 
