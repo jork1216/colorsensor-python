@@ -55,6 +55,7 @@ class SessionController(QObject):
         if snapshot_interval_seconds is not None:
             self.snapshot_interval = int(snapshot_interval_seconds)
 
+        self.last_snapshot_time = time.time()
         self.recording_started.emit()
 
     def stop_recording(self):
@@ -64,6 +65,7 @@ class SessionController(QObject):
 
     def finish_recording(self):
         self.state.recording = False
+        self.last_snapshot_time = 0
         self.state.record_end_ts = None
 
         sid = self.state.session_id
@@ -105,33 +107,33 @@ class SessionController(QObject):
 
         now = time.time()
 
-        if now - self.last_snapshot_time >= self.snapshot_interval:
+        if self.state.recording and (now - self.last_snapshot_time >= self.snapshot_interval):
             self.last_snapshot_time = now
             timestamp = datetime.now().strftime("%Y-%m-%d %I:%M:%S %p")
             overall = eval_result["overall_status"]
             self.snapshot_ready.emit(timestamp, overall, cur, delta)
 
-        if self.state.recording and self.state.session_id:
-            st = eval_result["status_per_index"]
-            row = {
-                "time": datetime.now(),
-                **pkt,
-                "session_id": self.state.session_id,
-                "session_name": "",
-                "chlorophyll_index": cur["chlorophyll_index"],
-                "chlorophyll_index_delta_pct": np.nan if delta["chlorophyll_index"] is None else delta["chlorophyll_index"],
-                "chlorophyll_index_status": st["chlorophyll_index"],
-                "car_chl_ratio": cur["car_chl_ratio"],
-                "car_chl_ratio_delta_pct": np.nan if delta["car_chl_ratio"] is None else delta["car_chl_ratio"],
-                "car_chl_ratio_status": st["car_chl_ratio"],
-                "yellow_index": cur["yellow_index"],
-                "yellow_index_delta_pct": np.nan if delta["yellow_index"] is None else delta["yellow_index"],
-                "yellow_index_status": st["yellow_index"],
-                "stress_ratio": cur["stress_ratio"],
-                "stress_ratio_delta_pct": np.nan if delta["stress_ratio"] is None else delta["stress_ratio"],
-                "stress_ratio_status": st["stress_ratio"],
-                "overall_status": eval_result["overall_status"],
-            }
-            append_row(row, CSV_PATH)
+            if self.state.recording and self.state.session_id:
+                st = eval_result["status_per_index"]
+                row = {
+                    "time": datetime.now(),
+                    **pkt,
+                    "session_id": self.state.session_id,
+                    "session_name": "",
+                    "chlorophyll_index": cur["chlorophyll_index"],
+                    "chlorophyll_index_delta_pct": np.nan if delta["chlorophyll_index"] is None else delta["chlorophyll_index"],
+                    "chlorophyll_index_status": st["chlorophyll_index"],
+                    "car_chl_ratio": cur["car_chl_ratio"],
+                    "car_chl_ratio_delta_pct": np.nan if delta["car_chl_ratio"] is None else delta["car_chl_ratio"],
+                    "car_chl_ratio_status": st["car_chl_ratio"],
+                    "yellow_index": cur["yellow_index"],
+                    "yellow_index_delta_pct": np.nan if delta["yellow_index"] is None else delta["yellow_index"],
+                    "yellow_index_status": st["yellow_index"],
+                    "stress_ratio": cur["stress_ratio"],
+                    "stress_ratio_delta_pct": np.nan if delta["stress_ratio"] is None else delta["stress_ratio"],
+                    "stress_ratio_status": st["stress_ratio"],
+                    "overall_status": eval_result["overall_status"],
+                }
+                append_row(row, CSV_PATH)
 
         self.packet_evaluated.emit(eval_result)

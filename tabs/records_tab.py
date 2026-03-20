@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from models import CSV_PATH
 from storage import load_records_df
+from theme import btn_neutral, btn_delete, btn_export
 from widgets.history_table import HistoryTable
 
 
@@ -42,6 +43,11 @@ class RecordsTab(QWidget):
         self.session_combo.currentIndexChanged.connect(self.load_selected_session_plot)
         self.btn_delete_session.clicked.connect(self.delete_selected_session)
         self.btn_export.clicked.connect(self.export_selected_session)
+
+        # Apply button stylesheets
+        self.btn_refresh_sessions.setStyleSheet(btn_neutral())
+        self.btn_delete_session.setStyleSheet(btn_delete())
+        self.btn_export.setStyleSheet(btn_export())
 
         self.session_info = QLabel("—")
         self.session_info.setStyleSheet("color: white;")

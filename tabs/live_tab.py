@@ -24,7 +24,11 @@ from config import LIVE_HISTORY_LIMIT, SNAPSHOT_INTERVAL_SECONDS, DEFAULT_RECORD
 from models import AS_COLS
 from storage import apply_session_name
 from color_utils import pkt_to_rgb
-from theme import banner_style_healthy, banner_style_mild_stress, banner_style_stressed
+from theme import (
+    banner_style_healthy, banner_style_mild_stress, banner_style_stressed,
+    btn_connect, btn_disconnect, btn_capture_baseline, btn_clear_baseline,
+    btn_start_recording, btn_stop_recording, btn_save_name, btn_skip, btn_neutral
+)
 from widgets.metric_card import MetricCard, metric_badge_style
 from widgets.history_table import HistoryTable
 
@@ -249,6 +253,18 @@ class LiveTab(QWidget):
         self.btn_save_name.clicked.connect(self.save_last_session_name)
         self.btn_skip_name.clicked.connect(self.skip_last_session_name)
 
+        # Apply button stylesheets
+        self.btn_refresh_ports.setStyleSheet(btn_neutral())
+        self.btn_connect.setStyleSheet(btn_connect())
+        self.btn_disconnect.setStyleSheet(btn_disconnect())
+        self.btn_capture_base.setStyleSheet(btn_capture_baseline())
+        self.btn_clear_base.setStyleSheet(btn_clear_baseline())
+        self.btn_start_record.setStyleSheet(btn_start_recording())
+        self.btn_stop_record.setStyleSheet(btn_stop_recording())
+        self.btn_reset_live.setStyleSheet(btn_neutral())
+        self.btn_save_name.setStyleSheet(btn_save_name())
+        self.btn_skip_name.setStyleSheet(btn_skip())
+
         self.name_prompt_widgets = [
             self.name_input,
             self.btn_save_name,
@@ -388,6 +404,8 @@ class LiveTab(QWidget):
         self.timer_label.setText(f"Remaining: {remaining_seconds}s (recording)")
 
     def on_snapshot_ready(self, timestamp, overall, cur, delta):
+        # Signal is only emitted from session_controller.on_packet() when self.state.recording is True.
+        # This is the only code path to add_live_history_row() - ensuring snapshots only record during active sessions.
         self.live_history_table.add_live_history_row(
             timestamp,
             overall,
