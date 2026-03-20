@@ -20,9 +20,11 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
 )
 
-from models import AS_COLS, CSV_PATH
+from config import LIVE_HISTORY_LIMIT, SNAPSHOT_INTERVAL_SECONDS, DEFAULT_RECORDING_DURATION, CSV_PATH
+from models import AS_COLS
 from storage import apply_session_name
 from color_utils import pkt_to_rgb
+from theme import banner_style_healthy, banner_style_mild_stress, banner_style_stressed
 from widgets.metric_card import MetricCard, metric_badge_style
 from widgets.history_table import HistoryTable
 
@@ -35,9 +37,9 @@ class LiveTab(QWidget):
         self.controller = controller
         self.refresh_sessions_callback = refresh_sessions_callback
 
-        self.live_history_limit = 100
+        self.live_history_limit = LIVE_HISTORY_LIMIT
         self.last_snapshot_time = 0
-        self.snapshot_interval = 30  # seconds
+        self.snapshot_interval = SNAPSHOT_INTERVAL_SECONDS
 
         self._name_prompt_anims = []
         self._name_prompt_hide_anims = []
@@ -86,7 +88,7 @@ class LiveTab(QWidget):
 
         self.duration_spin = QSpinBox()
         self.duration_spin.setRange(1, 3600)
-        self.duration_spin.setValue(30)
+        self.duration_spin.setValue(DEFAULT_RECORDING_DURATION)
         self.btn_start_record = QPushButton("Start Timed Recording")
         self.btn_stop_record = QPushButton("Stop Recording")
         self.timer_label = QLabel("Remaining: —")
@@ -390,44 +392,11 @@ class LiveTab(QWidget):
         self.overall_banner.setText(f"●  Overall Status: {overall_text}")
 
         if overall_text == "HEALTHY":
-            self.overall_banner.setStyleSheet("""
-                background-color: #052e16;
-                border: 1px solid #166534;
-                border-top-left-radius: 14px;
-                border-top-right-radius: 14px;
-                border-bottom-left-radius: 0px;
-                border-bottom-right-radius: 0px;
-                color: #86efac;
-                font-size: 18px;
-                font-weight: 800;
-                padding-left: 20px;
-            """)
+            self.overall_banner.setStyleSheet(banner_style_healthy())
         elif overall_text in {"WARNING", "MODERATE"}:
-            self.overall_banner.setStyleSheet("""
-                background-color: #3f2a06;
-                border: 1px solid #a16207;
-                border-top-left-radius: 14px;
-                border-top-right-radius: 14px;
-                border-bottom-left-radius: 0px;
-                border-bottom-right-radius: 0px;
-                color: #fde047;
-                font-size: 18px;
-                font-weight: 800;
-                padding-left: 20px;
-            """)
+            self.overall_banner.setStyleSheet(banner_style_mild_stress())
         else:
-            self.overall_banner.setStyleSheet("""
-                background-color: #3f1113;
-                border: 1px solid #991b1b;
-                border-top-left-radius: 14px;
-                border-top-right-radius: 14px;
-                border-bottom-left-radius: 0px;
-                border-bottom-right-radius: 0px;
-                color: #fca5a5;
-                font-size: 18px;
-                font-weight: 800;
-                padding-left: 20px;
-            """)
+            self.overall_banner.setStyleSheet(banner_style_stressed())
 
         update_metric_card(
             self.card_chl,

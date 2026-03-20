@@ -4,7 +4,8 @@ from datetime import datetime
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 
-from models import AS_COLS, CSV_PATH
+from config import SNAPSHOT_INTERVAL_SECONDS, SERIAL_FLUSH_SECONDS, CSV_PATH
+from models import AS_COLS
 from metrics import compute_all_indices, evaluate_against_baseline
 from storage import append_row
 
@@ -23,7 +24,7 @@ class SessionController(QObject):
         self.state = state
         self.reader = reader
         self.last_snapshot_time = 0
-        self.snapshot_interval = 30  # seconds
+        self.snapshot_interval = SNAPSHOT_INTERVAL_SECONDS
 
     def capture_baseline(self):
         if not self.state.last_pkt:
@@ -43,7 +44,7 @@ class SessionController(QObject):
         self.baseline_cleared.emit()
 
     def start_recording(self, duration_seconds):
-        self.reader.flush_buffer(0.6)
+        self.reader.flush_buffer(SERIAL_FLUSH_SECONDS)
         self.reader.clear_pending()
 
         self.state.recording = True

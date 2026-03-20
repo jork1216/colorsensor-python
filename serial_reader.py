@@ -6,6 +6,7 @@ import serial.tools.list_ports
 
 from PySide6.QtCore import QThread, Signal
 
+from config import SERIAL_BAUD, SERIAL_CONNECT_SLEEP, SERIAL_FLUSH_SECONDS
 from models import JSON_ALIAS_TO_AS, AS_COLS, KV_PATTERN
 
 
@@ -22,12 +23,12 @@ class SerialReader(QThread):
     def list_ports(self):
         return [p.device for p in serial.tools.list_ports.comports()]
 
-    def connect_port(self, port, baud=115200):
+    def connect_port(self, port, baud=SERIAL_BAUD):
         self.disconnect_port()
         try:
             self._ser = serial.Serial(port, baud, timeout=0.2)
-            time.sleep(2.0)
-            self.flush_buffer(0.5)
+            time.sleep(SERIAL_CONNECT_SLEEP)
+            self.flush_buffer(SERIAL_FLUSH_SECONDS)
             self.clear_pending()
             self.status.emit(f"Connected: {port} @ {baud}")
             return True
@@ -71,7 +72,7 @@ class SerialReader(QThread):
             return None
         return pkt
 
-    def flush_buffer(self, seconds=0.6):
+    def flush_buffer(self, seconds=SERIAL_FLUSH_SECONDS):
         if not self._ser:
             return
         try:

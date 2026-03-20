@@ -2,10 +2,10 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from config import CSV_PATH, MAX_BUFFER_POINTS
 
 # CONFIG
 AS_COLS = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "CLR"]
-CSV_PATH = "records_as7341_algae.csv"
 KV_PATTERN = re.compile(r"\b(F1|F2|F3|F4|F5|F6|F7|F8|CLR)\s*=\s*(\d+)\b")
 JSON_ALIAS_TO_AS = {
     "415nm": "F1",
@@ -66,7 +66,7 @@ class AppState:
     session_id: str | None = None
     last_session_needs_name: str | None = None
 
-    max_points: int = 800
+    max_points: int = MAX_BUFFER_POINTS
     t: list = field(default_factory=list)
     channels: dict = field(default_factory=lambda: {k: [] for k in AS_COLS})
 

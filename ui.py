@@ -7,7 +7,8 @@ from PySide6.QtWidgets import (
     QTabWidget,
 )
 
-from models import CSV_PATH, AppState
+from config import CSV_PATH, UI_TIMER_INTERVAL_MS
+from models import AppState
 from storage import ensure_csv_schema
 from serial_reader import SerialReader
 from session_controller import SessionController
@@ -60,7 +61,7 @@ class MainWindow(QMainWindow):
         self.controller.baseline_cleared.connect(self.live_tab.on_baseline_cleared)
 
         self.ui_timer = QTimer()
-        self.ui_timer.setInterval(80)
+        self.ui_timer.setInterval(UI_TIMER_INTERVAL_MS)
         self.ui_timer.timeout.connect(self.tick_ui)
         self.ui_timer.start()
 

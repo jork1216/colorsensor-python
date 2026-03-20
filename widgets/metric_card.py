@@ -6,50 +6,20 @@ from PySide6.QtWidgets import (
     QLabel,
 )
 
+from theme import badge_style_healthy, badge_style_mild_stress, badge_style_stressed, badge_style_unknown
+
 
 def metric_badge_style(status: str) -> str:
     status = str(status or "").strip().upper()
 
     if status == "HEALTHY":
-        return """
-            padding: 4px 12px;
-            border: 1px solid #166534;
-            border-radius: 8px;
-            color: #86efac;
-            background-color: transparent;
-            font-size: 14px;
-            font-weight: 700;
-        """
+        return badge_style_healthy()
     elif status in {"WARNING", "MODERATE"}:
-        return """
-            padding: 4px 12px;
-            border: 1px solid #a16207;
-            border-radius: 8px;
-            color: #facc15;
-            background-color: transparent;
-            font-size: 14px;
-            font-weight: 700;
-        """
+        return badge_style_mild_stress()
     elif status in {"CRITICAL", "HIGH", "STRESS"}:
-        return """
-            padding: 4px 12px;
-            border: 1px solid #991b1b;
-            border-radius: 8px;
-            color: #fca5a5;
-            background-color: transparent;
-            font-size: 14px;
-            font-weight: 700;
-        """
+        return badge_style_stressed()
     else:
-        return """
-            padding: 4px 12px;
-            border: 1px solid #374151;
-            border-radius: 8px;
-            color: #d1d5db;
-            background-color: transparent;
-            font-size: 14px;
-            font-weight: 700;
-        """
+        return badge_style_unknown()
 
 
 class MetricCard(QWidget):

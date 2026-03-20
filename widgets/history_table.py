@@ -9,6 +9,12 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 
+from theme import (
+    BG_GREEN_DARK, TEXT_GREEN,
+    BG_YELLOW_DARK, TEXT_YELLOW,
+    BG_RED_DARK, TEXT_MUTED, TEXT_PURPLE
+)
+
 
 class HistoryTable(QTableWidget):
     def __init__(self):
@@ -92,14 +98,14 @@ class HistoryTable(QTableWidget):
     def status_cell_style(self, status):
         s = str(status or "").upper()
         if s == "HEALTHY":
-            return "#86efac", "#052e16"
+            return TEXT_GREEN, BG_GREEN_DARK
         if s in {"WARNING", "MODERATE"}:
-            return "#fde047", "#3f2a06"
-        return "#f87171", "#3f1113"
+            return TEXT_YELLOW, BG_YELLOW_DARK
+        return "#f87171", BG_RED_DARK
 
     def delta_color(self, value):
         if value is None or pd.isna(value):
-            return "#9ca3af"
+            return TEXT_MUTED
         return "#6ee7b7" if float(value) >= 0 else "#f87171"
 
     def add_live_history_row(self, timestamp_str, overall, cur, delta, count_label):
@@ -110,7 +116,7 @@ class HistoryTable(QTableWidget):
         row_bg = "#2d2070"
 
         values = [
-            self.make_table_item(timestamp_str, "#c4b5fd", False, Qt.AlignLeft | Qt.AlignVCenter, row_bg),
+            self.make_table_item(timestamp_str, TEXT_PURPLE, False, Qt.AlignLeft | Qt.AlignVCenter, row_bg),
             self.make_table_item(f"● {str(overall).upper()}", fg, True, Qt.AlignCenter, bg),
             self.make_table_item(f"{cur['chlorophyll_index']:.3f}", "#6ee7b7", False, Qt.AlignLeft | Qt.AlignVCenter, row_bg),
             self.make_table_item(self.format_delta(delta["chlorophyll_index"]), self.delta_color(delta["chlorophyll_index"]), True, Qt.AlignLeft | Qt.AlignVCenter, row_bg),
