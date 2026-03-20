@@ -6,7 +6,10 @@ from PySide6.QtWidgets import (
     QLabel,
 )
 
-from theme import badge_style_healthy, badge_style_mild_stress, badge_style_stressed, badge_style_unknown
+from theme import (
+    badge_style_healthy, badge_style_mild_stress, badge_style_stressed, badge_style_unknown,
+    delta_box_style_active, delta_box_style_muted,
+)
 
 
 def metric_badge_style(status: str) -> str:
@@ -26,10 +29,10 @@ class MetricCard(QWidget):
     def __init__(self, title: str, formula: str):
         super().__init__()
         
-        self.setMinimumHeight(160)
+        self.setMinimumHeight(200)
         self.setStyleSheet("""
             QWidget {
-                background-color: #052e16;
+                background-color: #0a3d1f;
                 border: 1px solid #166534;
                 border-radius: 0px;
             }
@@ -59,15 +62,7 @@ class MetricCard(QWidget):
 
         self.badge = QLabel("—")
         self.badge.setAlignment(Qt.AlignCenter)
-        self.badge.setStyleSheet("""
-            padding: 4px 12px;
-            border: 1px solid #166534;
-            border-radius: 8px;
-            color: #86efac;
-            background-color: transparent;
-            font-size: 14px;
-            font-weight: 700;
-        """)
+        self.badge.setStyleSheet(badge_style_unknown())
         self.badge.setFixedHeight(30)
 
         value_row.addWidget(self.value, 0, Qt.AlignBottom)
@@ -82,11 +77,7 @@ class MetricCard(QWidget):
         """)
 
         self.delta = QLabel("— from baseline")
-        self.delta.setStyleSheet("""
-            color: #86efac;
-            font-size: 13px;
-            font-weight: 700;
-        """)
+        self.delta.setStyleSheet(delta_box_style_muted())
 
         self.formula = QLabel(formula)
         self.formula.setStyleSheet("""
@@ -100,5 +91,4 @@ class MetricCard(QWidget):
         layout.addLayout(value_row)
         layout.addWidget(self.baseline)
         layout.addWidget(self.delta)
-        layout.addStretch()
         layout.addWidget(self.formula)
