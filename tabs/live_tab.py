@@ -87,8 +87,13 @@ class LiveTab(QWidget):
         self.base_info.setStyleSheet("color: #fbbf24; font-weight:600;")
 
         self.duration_spin = QSpinBox()
-        self.duration_spin.setRange(1, 3600)
-        self.duration_spin.setValue(DEFAULT_RECORDING_DURATION)
+        self.duration_spin.setRange(1, 60)
+        self.duration_spin.setValue(DEFAULT_RECORDING_DURATION // 60 if DEFAULT_RECORDING_DURATION >= 60 else 1)
+        
+        self.snapshot_spin = QSpinBox()
+        self.snapshot_spin.setRange(1, 300)
+        self.snapshot_spin.setValue(SNAPSHOT_INTERVAL_SECONDS)
+        
         self.btn_start_record = QPushButton("Start Timed Recording")
         self.btn_stop_record = QPushButton("Stop Recording")
         self.timer_label = QLabel("Remaining: —")
@@ -96,16 +101,23 @@ class LiveTab(QWidget):
 
         self.btn_reset_live = QPushButton("Reset Live History")
 
+        # Initialize capture and recording buttons as disabled until connected
+        self.btn_capture_base.setEnabled(False)
+        self.btn_start_record.setEnabled(False)
+        self.btn_stop_record.setEnabled(False)
+
         grid.addWidget(self.btn_capture_base, 0, 0)
         grid.addWidget(self.btn_clear_base, 0, 1)
         grid.addWidget(self.base_info, 0, 2, 1, 4)
 
-        grid.addWidget(QLabel("Duration (s):"), 1, 0)
+        grid.addWidget(QLabel("Duration (min):"), 1, 0)
         grid.addWidget(self.duration_spin, 1, 1)
-        grid.addWidget(self.btn_start_record, 1, 2)
-        grid.addWidget(self.btn_stop_record, 1, 3)
-        grid.addWidget(self.timer_label, 1, 4)
-        grid.addWidget(self.btn_reset_live, 1, 5)
+        grid.addWidget(QLabel("Snap every (s):"), 1, 2)
+        grid.addWidget(self.snapshot_spin, 1, 3)
+        grid.addWidget(self.btn_start_record, 1, 4)
+        grid.addWidget(self.btn_stop_record, 1, 5)
+        grid.addWidget(self.timer_label, 1, 6)
+        grid.addWidget(self.btn_reset_live, 1, 7)
 
         self.btn_capture_base.clicked.connect(lambda: self.controller.capture_baseline())
         self.btn_clear_base.clicked.connect(lambda: self.controller.clear_baseline())
@@ -130,9 +142,18 @@ class LiveTab(QWidget):
         """)
         root.addWidget(self.overall_banner)
 
-        cards_row = QHBoxLayout()
+        # Create a container widget with green styling
+        cards_container = QWidget()
+        cards_container.setStyleSheet("""
+            background-color: #052e16;
+            border: 1px solid #166534;
+            border-radius: 8px;
+        """)
+
+        cards_row = QHBoxLayout(cards_container)
         cards_row.setSpacing(0)
-        root.addLayout(cards_row)
+        cards_row.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(cards_container)
 
         self.card_chl = MetricCard("CHLOROPHYLL INDEX", "F8(680nm) / F2(445nm)")
         self.card_car = MetricCard("CAR:CHL RATIO", "F3(480nm) / F8(680nm)")
@@ -140,8 +161,29 @@ class LiveTab(QWidget):
         self.card_stress = MetricCard("STRESS RATIO", "(F5+F6) / (F2+F8) normalized by Clear")
 
         cards_row.addWidget(self.card_chl)
+        
+        # Vertical separator line
+        sep1 = QWidget()
+        sep1.setFixedWidth(1)
+        sep1.setStyleSheet("background-color: #166534;")
+        cards_row.addWidget(sep1)
+        
         cards_row.addWidget(self.card_car)
+        
+        # Vertical separator line
+        sep2 = QWidget()
+        sep2.setFixedWidth(1)
+        sep2.setStyleSheet("background-color: #166534;")
+        cards_row.addWidget(sep2)
+        
         cards_row.addWidget(self.card_yellow)
+        
+        # Vertical separator line
+        sep3 = QWidget()
+        sep3.setFixedWidth(1)
+        sep3.setStyleSheet("background-color: #166534;")
+        cards_row.addWidget(sep3)
+        
         cards_row.addWidget(self.card_stress)
 
         viz = QHBoxLayout()
@@ -233,6 +275,12 @@ class LiveTab(QWidget):
 
     def on_status(self, msg: str):
         self.status_label.setText(msg)
+        
+        # Wire connection state to button enable/disable logic
+        connected = self.reader._ser is not None
+        self.btn_capture_base.setEnabled(connected)
+        self.btn_start_record.setEnabled(connected)
+        self.btn_stop_record.setEnabled(connected and self.state.recording)
 
     def handle_connect(self):
         port = self.port_combo.currentText().strip()
@@ -299,9 +347,11 @@ class LiveTab(QWidget):
         if not self.reader._ser:
             QMessageBox.warning(self, "Not Connected", "Connect to Arduino first.")
             return
-        dur = int(self.duration_spin.value())
+        dur_minutes = int(self.duration_spin.value())
+        dur_seconds = dur_minutes * 60
+        snapshot_interval = int(self.snapshot_spin.value())
         self.reset_live_buffers()
-        self.controller.start_recording(dur)
+        self.controller.start_recording(dur_seconds, snapshot_interval)
 
     def on_baseline_captured(self, indices, timestamp_str):
         bi = indices
@@ -323,10 +373,12 @@ class LiveTab(QWidget):
         dur = int(self.duration_spin.value())
         self.timer_label.setText(f"Remaining: {dur}s (recording)")
         self.timer_label.setStyleSheet("font-weight:900;color:white;")
+        self.btn_stop_record.setEnabled(True)
 
     def on_recording_stopped(self, session_id):
         self.timer_label.setText("Remaining: —")
         self.timer_label.setStyleSheet("font-weight:700; color: white;")
+        self.btn_stop_record.setEnabled(False)
         
         if session_id:
             self.show_name_prompt(session_id)

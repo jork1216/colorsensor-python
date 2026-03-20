@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QComboBox,
     QMessageBox,
+    QFileDialog,
 )
 
 from models import CSV_PATH
@@ -29,15 +30,18 @@ class RecordsTab(QWidget):
         self.session_combo = QComboBox()
         self.btn_refresh_sessions = QPushButton("Refresh Sessions")
         self.btn_delete_session = QPushButton("Delete Session")
+        self.btn_export = QPushButton("Export Excel…")
 
         top.addWidget(QLabel("Session:"))
         top.addWidget(self.session_combo, 4)
         top.addWidget(self.btn_refresh_sessions)
         top.addWidget(self.btn_delete_session)
+        top.addWidget(self.btn_export)
 
         self.btn_refresh_sessions.clicked.connect(self.refresh_sessions)
         self.session_combo.currentIndexChanged.connect(self.load_selected_session_plot)
         self.btn_delete_session.clicked.connect(self.delete_selected_session)
+        self.btn_export.clicked.connect(self.export_selected_session)
 
         self.session_info = QLabel("—")
         self.session_info.setStyleSheet("color: white;")
@@ -221,3 +225,65 @@ class RecordsTab(QWidget):
         new_df2.to_csv(CSV_PATH, index=False)
 
         self.refresh_sessions()
+
+    def export_selected_session(self):
+        # Get selected session ID
+        sid = self.session_combo.currentData()
+        if not sid:
+            return
+
+        # Load and filter DataFrame to this session
+        df = load_records_df(CSV_PATH)
+        sdf = df[df["session_id"].astype(str) == str(sid)].sort_values("time").copy()
+        if sdf.empty:
+            QMessageBox.critical(self, "Error", "Session has no data.")
+            return
+
+        # Open save dialog
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Session", "", "Excel Files (*.xlsx)"
+        )
+        if not file_path:
+            return
+
+        try:
+            # Prepare data for sheets
+            index_cols = [
+                "chlorophyll_index",
+                "chlorophyll_index_delta_pct",
+                "car_chl_ratio",
+                "car_chl_ratio_delta_pct",
+                "yellow_index",
+                "yellow_index_delta_pct",
+                "stress_ratio",
+                "stress_ratio_delta_pct",
+            ]
+            session_data_cols = ["time"] + index_cols + ["overall_status"]
+            session_data = sdf[session_data_cols].copy()
+
+            # Prepare summary data (first and last rows)
+            first_row = sdf[session_data_cols].iloc[0].copy()
+            last_row = sdf[session_data_cols].iloc[-1].copy()
+
+            summary_data = pd.DataFrame(
+                [
+                    {"type": "Baseline", **first_row.to_dict()},
+                    {"type": "Final", **last_row.to_dict()},
+                ]
+            )
+
+            # Write Excel file with two sheets
+            with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
+                session_data.to_excel(writer, sheet_name="Session Data", index=False)
+                summary_data.to_excel(writer, sheet_name="Summary", index=False)
+
+            QMessageBox.information(
+                self,
+                "Export Successful",
+                f"Session exported successfully to:\n{file_path}",
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Export Failed", f"Failed to export session:\n{str(e)}"
+            )
+

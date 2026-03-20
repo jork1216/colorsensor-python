@@ -43,7 +43,7 @@ class SessionController(QObject):
         self.state.baseline_time = None
         self.baseline_cleared.emit()
 
-    def start_recording(self, duration_seconds):
+    def start_recording(self, duration_seconds, snapshot_interval_seconds=None):
         self.reader.flush_buffer(SERIAL_FLUSH_SECONDS)
         self.reader.clear_pending()
 
@@ -51,6 +51,9 @@ class SessionController(QObject):
         dur = int(duration_seconds)
         self.state.record_end_ts = time.time() + max(1, dur)
         self.state.session_id = datetime.now().isoformat()
+        
+        if snapshot_interval_seconds is not None:
+            self.snapshot_interval = int(snapshot_interval_seconds)
 
         self.recording_started.emit()
 
