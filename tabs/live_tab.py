@@ -1,10 +1,11 @@
+import json
 import time
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
 
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -18,9 +19,10 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QScrollArea,
     QGraphicsOpacityEffect,
+    QDialog,
 )
 
-from config import LIVE_HISTORY_LIMIT, SNAPSHOT_INTERVAL_SECONDS, DEFAULT_RECORDING_DURATION, CSV_PATH
+from config import LIVE_HISTORY_LIMIT, SNAPSHOT_INTERVAL_SECONDS, DEFAULT_RECORDING_DURATION, CSV_PATH, SETTINGS_PATH
 from models import AS_COLS
 from storage import apply_session_name
 from color_utils import pkt_to_rgb
@@ -34,6 +36,15 @@ from widgets.history_table import HistoryTable
 
 
 class LiveTab(QWidget):
+    class AutoRefreshComboBox(QComboBox):
+        def __init__(self, refresh_callback: callable, parent=None):
+            super().__init__(parent)
+            self._refresh_callback = refresh_callback
+
+        def showPopup(self):
+            self._refresh_callback()
+            super().showPopup()
+
     def __init__(self, state, reader, controller, refresh_sessions_callback):
         super().__init__()
         self.state = state
@@ -45,8 +56,6 @@ class LiveTab(QWidget):
         self.last_snapshot_time = 0
         self.snapshot_interval = SNAPSHOT_INTERVAL_SECONDS
 
-        self._name_prompt_anims = []
-        self._name_prompt_hide_anims = []
         self.swatch_anim = None
 
         # Build the live tab UI
@@ -64,8 +73,7 @@ class LiveTab(QWidget):
         top = QHBoxLayout()
         root.addLayout(top)
 
-        self.port_combo = QComboBox()
-        self.btn_refresh_ports = QPushButton("Refresh Ports")
+        self.port_combo = self.AutoRefreshComboBox(refresh_callback=self._populate_ports)
         self.btn_connect = QPushButton("Connect")
         self.btn_disconnect = QPushButton("Disconnect")
         self.status_label = QLabel("Disconnected")
@@ -73,12 +81,10 @@ class LiveTab(QWidget):
 
         top.addWidget(QLabel("Port:"))
         top.addWidget(self.port_combo, 2)
-        top.addWidget(self.btn_refresh_ports)
         top.addWidget(self.btn_connect)
         top.addWidget(self.btn_disconnect)
         top.addWidget(self.status_label, 3)
 
-        self.btn_refresh_ports.clicked.connect(self.refresh_ports)
         self.btn_connect.clicked.connect(self.handle_connect)
         self.btn_disconnect.clicked.connect(self.handle_disconnect)
 
@@ -103,6 +109,10 @@ class LiveTab(QWidget):
         self.timer_label = QLabel("Remaining: —")
         self.timer_label.setStyleSheet("font-weight:700; color: white;")
 
+        self._rec_blink_timer = QTimer(self)
+        self._rec_blink_timer.setInterval(600)
+        self._rec_blink_timer.timeout.connect(self._on_rec_blink)
+
         self.btn_reset_live = QPushButton("Reset Live History")
 
         # Initialize capture and recording buttons as disabled until connected
@@ -114,7 +124,7 @@ class LiveTab(QWidget):
         grid.addWidget(self.btn_clear_base, 0, 1)
         grid.addWidget(self.base_info, 0, 2, 1, 4)
 
-        grid.addWidget(QLabel("Duration (min):"), 1, 0)
+        grid.addWidget(QLabel("Duration (minutes):"), 1, 0)
         grid.addWidget(self.duration_spin, 1, 1)
         grid.addWidget(QLabel("Snap every (s):"), 1, 2)
         grid.addWidget(self.snapshot_spin, 1, 3)
@@ -224,10 +234,17 @@ class LiveTab(QWidget):
 
         history_title = QLabel("📋  Snap History")
         history_title.setStyleSheet("font-size: 18px; font-weight: 800; color: white;")
+        
+        self.rec_indicator = QLabel("● REC")
+        self.rec_indicator.setStyleSheet("color: white; font-size: 14px; font-weight: 700; background-color: transparent; padding: 4px 8px;")
+        self.rec_indicator.hide()
+        self._rec_blink_state = False
+        
         self.live_history_count = QLabel("0 snaps recorded")
         self.live_history_count.setStyleSheet("color: #c4b5fd; font-weight:600;")
 
         history_header.addWidget(history_title)
+        history_header.addWidget(self.rec_indicator)
         history_header.addStretch()
         history_header.addWidget(self.live_history_count)
 
@@ -235,26 +252,7 @@ class LiveTab(QWidget):
         self.live_history_table.setMinimumHeight(180)
         root.addWidget(self.live_history_table, 1)
 
-        name_row = QHBoxLayout()
-        root.addLayout(name_row)
-
-        self.name_input = QLineEdit()
-        self.name_input.setPlaceholderText("Name last session (optional)")
-        self.btn_save_name = QPushButton("Save Name")
-        self.btn_skip_name = QPushButton("Skip")
-        self.name_hint = QLabel("")
-        self.name_hint.setStyleSheet("color: #c4b5fd;")
-
-        name_row.addWidget(self.name_input, 3)
-        name_row.addWidget(self.btn_save_name)
-        name_row.addWidget(self.btn_skip_name)
-        name_row.addWidget(self.name_hint, 3)
-
-        self.btn_save_name.clicked.connect(self.save_last_session_name)
-        self.btn_skip_name.clicked.connect(self.skip_last_session_name)
-
         # Apply button stylesheets
-        self.btn_refresh_ports.setStyleSheet(btn_neutral())
         self.btn_connect.setStyleSheet(btn_connect())
         self.btn_disconnect.setStyleSheet(btn_disconnect())
         self.btn_capture_base.setStyleSheet(btn_capture_baseline())
@@ -262,25 +260,27 @@ class LiveTab(QWidget):
         self.btn_start_record.setStyleSheet(btn_start_recording())
         self.btn_stop_record.setStyleSheet(btn_stop_recording())
         self.btn_reset_live.setStyleSheet(btn_neutral())
-        self.btn_save_name.setStyleSheet(btn_save_name())
-        self.btn_skip_name.setStyleSheet(btn_skip())
 
-        self.name_prompt_widgets = [
-            self.name_input,
-            self.btn_save_name,
-            self.btn_skip_name,
-            self.name_hint,
-        ]
-        self.name_prompt_effects = []
-        for w in self.name_prompt_widgets:
-            eff = QGraphicsOpacityEffect(w)
-            eff.setOpacity(0.0)
-            w.setGraphicsEffect(eff)
-            self.name_prompt_effects.append(eff)
+    def _on_rec_blink(self):
+        self._rec_blink_state = not self._rec_blink_state
+        if self._rec_blink_state:
+            self.rec_indicator.setStyleSheet("color: white; font-size: 14px; font-weight: 700; background-color: #ef4444; padding: 4px 8px;")
+        else:
+            self.rec_indicator.setStyleSheet("color: white; font-size: 14px; font-weight: 700; background-color: transparent; padding: 4px 8px;")
 
-        self.hide_name_prompt(immediate=True)
+    def _save_last_port(self, port: str):
+        with open(SETTINGS_PATH, "w") as f:
+            json.dump({"last_port": port}, f)
 
-    def refresh_ports(self):
+    def _load_last_port(self) -> str | None:
+        try:
+            with open(SETTINGS_PATH, "r") as f:
+                settings = json.load(f)
+            return settings["last_port"]
+        except Exception:
+            return None
+
+    def _populate_ports(self):
         ports = self.reader.list_ports()
         self.port_combo.clear()
         if not ports:
@@ -288,6 +288,14 @@ class LiveTab(QWidget):
         else:
             for p in ports:
                 self.port_combo.addItem(p)
+        last = self._load_last_port()
+        if last is not None:
+            idx = self.port_combo.findText(last)
+            if idx != -1:
+                self.port_combo.setCurrentIndex(idx)
+
+    def refresh_ports(self):
+        self._populate_ports()
 
     def on_status(self, msg: str):
         self.status_label.setText(msg)
@@ -306,6 +314,7 @@ class LiveTab(QWidget):
 
         ok = self.reader.connect_port(port, baud=115200)
         if ok:
+            self._save_last_port(port)
             self.reader.flush_buffer(0.6)
             self.reader.clear_pending()
 
@@ -385,13 +394,16 @@ class LiveTab(QWidget):
         self.base_info.setStyleSheet("color: #fbbf24; font-weight:600;")
 
     def on_recording_started(self):
-        self.hide_name_prompt()
-        dur = int(self.duration_spin.value())
-        self.timer_label.setText(f"Remaining: {dur}s (recording)")
+        dur_minutes = int(self.duration_spin.value())
+        self.timer_label.setText(f"Remaining: {dur_minutes}m 0s (recording)")
         self.timer_label.setStyleSheet("font-weight:900;color:white;")
         self.btn_stop_record.setEnabled(True)
+        self.rec_indicator.show()
+        self._rec_blink_timer.start()
 
     def on_recording_stopped(self, session_id):
+        self._rec_blink_timer.stop()
+        self.rec_indicator.hide()
         self.timer_label.setText("Remaining: —")
         self.timer_label.setStyleSheet("font-weight:700; color: white;")
         self.btn_stop_record.setEnabled(False)
@@ -400,8 +412,14 @@ class LiveTab(QWidget):
             self.show_name_prompt(session_id)
             self.refresh_sessions_callback()
 
+    def on_recording_aborted(self, msg: str):
+        self.on_recording_stopped(session_id=None)
+        QMessageBox.warning(self, "Recording Aborted", msg)
+
     def on_tick(self, remaining_seconds):
-        self.timer_label.setText(f"Remaining: {remaining_seconds}s (recording)")
+        minutes = remaining_seconds // 60
+        seconds = remaining_seconds % 60
+        self.timer_label.setText(f"Remaining: {minutes}m {seconds}s (recording)")
 
     def on_snapshot_ready(self, timestamp, overall, cur, delta):
         # Signal is only emitted from session_controller.on_packet() when self.state.recording is True.
@@ -506,61 +524,48 @@ class LiveTab(QWidget):
         self.rgb_text.setText(f"RGB: {r}, {g}, {b}")
         self.hex_text.setText(f"HEX: {hexv}   |   CLR: {pkt.get('CLR', '—')}")
 
-    def save_last_session_name(self):
-        sid = self.state.last_session_needs_name
-        if not sid:
-            return
-
-        name = self.name_input.text().strip()
-        apply_session_name(sid, name, CSV_PATH)
-        self.state.last_session_needs_name = None
-        self.hide_name_prompt()
-        self.refresh_sessions_callback()
-
-    def skip_last_session_name(self):
-        self.state.last_session_needs_name = None
-        self.hide_name_prompt()
-        self.refresh_sessions_callback()
-
-    def hide_name_prompt(self, immediate=False):
-        if immediate:
-            for w, eff in zip(self.name_prompt_widgets, self.name_prompt_effects):
-                eff.setOpacity(0.0)
-                w.hide()
-            return
-
-        self._name_prompt_hide_anims = []
-        for w, eff in zip(self.name_prompt_widgets, self.name_prompt_effects):
-            anim = QPropertyAnimation(eff, b"opacity")
-            anim.setDuration(180)
-            anim.setStartValue(eff.opacity())
-            anim.setEndValue(0.0)
-            anim.setEasingCurve(QEasingCurve.InCubic)
-
-            def hide_widget(widget=w):
-                widget.hide()
-
-            anim.finished.connect(hide_widget)
-            anim.start()
-            self._name_prompt_hide_anims.append(anim)
-
     def show_name_prompt(self, sid: str):
-        self.state.last_session_needs_name = sid
-        self.name_input.setText(f"Sample {datetime.now():%Y-%m-%d %I:%M %p}")
-        self.name_hint.setText(f"Session ID: {sid}")
+        dialog = QDialog(self)
+        dialog.setWindowModality(Qt.WindowModal)
+        dialog.setWindowTitle("Name This Recording")
 
-        for w in self.name_prompt_widgets:
-            w.show()
+        layout = QVBoxLayout()
 
-        self._name_prompt_anims = []
-        for eff in self.name_prompt_effects:
-            anim = QPropertyAnimation(eff, b"opacity")
-            anim.setDuration(320)
-            anim.setStartValue(0.0)
-            anim.setEndValue(1.0)
-            anim.setEasingCurve(QEasingCurve.OutCubic)
-            anim.start()
-            self._name_prompt_anims.append(anim)
+        label = QLabel("Name this recording")
+        layout.addWidget(label)
+
+        name_input = QLineEdit()
+        name_input.setText(datetime.now().strftime("%Y-%m-%d %I:%M %p"))
+        layout.addWidget(name_input)
+
+        button_layout = QHBoxLayout()
+        save_button = QPushButton("Save")
+        skip_button = QPushButton("Skip")
+        button_layout.addWidget(save_button)
+        button_layout.addWidget(skip_button)
+        layout.addLayout(button_layout)
+
+        def on_save():
+            name = name_input.text()
+            apply_session_name(sid, name, CSV_PATH)
+            self.state.last_session_needs_name = None
+            self.refresh_sessions_callback()
+            dialog.accept()
+
+        def on_skip():
+            self.state.last_session_needs_name = None
+            self.refresh_sessions_callback()
+            dialog.reject()
+
+        save_button.clicked.connect(on_save)
+        skip_button.clicked.connect(on_skip)
+
+        save_button.setStyleSheet(btn_save_name())
+        skip_button.setStyleSheet(btn_skip())
+
+        dialog.setLayout(layout)
+        dialog.resize(500, 150)
+        dialog.exec()
 
     def tick_ui(self):
         # Call controller's tick_recording to update timer and check if recording is finished

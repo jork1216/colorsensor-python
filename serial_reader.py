@@ -13,6 +13,7 @@ from models import JSON_ALIAS_TO_AS, AS_COLS, KV_PATTERN
 class SerialReader(QThread):
     packet = Signal(dict)
     status = Signal(str)
+    disconnected = Signal()
 
     def __init__(self):
         super().__init__()
@@ -124,6 +125,10 @@ class SerialReader(QThread):
 
             except Exception as e:
                 self.status.emit(f"Serial read error: {e}")
+                if self._ser is None or isinstance(e, serial.SerialException):
+                    self.disconnect_port()
+                    self.disconnected.emit()
+                    return
                 time.sleep(0.2)
 
             time.sleep(0.005)

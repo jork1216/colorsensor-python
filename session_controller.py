@@ -13,6 +13,7 @@ from storage import append_row
 class SessionController(QObject):
     recording_started = Signal()
     recording_stopped = Signal(str)
+    recording_aborted = Signal(str)
     tick = Signal(int)
     snapshot_ready = Signal(str, str, dict, dict)
     packet_evaluated = Signal(dict)
@@ -88,6 +89,11 @@ class SessionController(QObject):
         if self.state.last_pkt:
             eval_result = evaluate_against_baseline(self.state.last_pkt, self.state.baseline_pkt)
             self.packet_evaluated.emit(eval_result)
+
+    def on_serial_disconnected(self):
+        if self.state.recording:
+            self.finish_recording()
+        self.recording_aborted.emit("Recording stopped: serial connection lost")
 
     def on_packet(self, pkt: dict):
         self.state.last_pkt = pkt

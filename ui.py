@@ -59,6 +59,8 @@ class MainWindow(QMainWindow):
         self.controller.packet_evaluated.connect(self.live_tab.on_packet_evaluated)
         self.controller.baseline_captured.connect(self.live_tab.on_baseline_captured)
         self.controller.baseline_cleared.connect(self.live_tab.on_baseline_cleared)
+        self.reader.disconnected.connect(self.controller.on_serial_disconnected)
+        self.controller.recording_aborted.connect(self.on_recording_aborted)
 
         self.ui_timer = QTimer()
         self.ui_timer.setInterval(UI_TIMER_INTERVAL_MS)
@@ -97,7 +99,7 @@ class MainWindow(QMainWindow):
                 border-radius: 10px;
             }
             QTabBar::tab {
-                background: #3d2f8f;
+                background: #0f172a;
                 color: white;
                 padding: 10px 16px;
                 margin-right: 4px;
@@ -106,7 +108,7 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
             }
             QTabBar::tab:selected {
-                background: #0f172a;
+                background: #3d2f8f;
                 color: white;
             }
         """)
@@ -128,6 +130,9 @@ class MainWindow(QMainWindow):
         self._animations.append(anim)
 
 
+
+    def on_recording_aborted(self, msg: str):
+        self.live_tab.on_recording_aborted(msg)
 
     def on_status(self, msg: str):
         self.live_tab.on_status(msg)

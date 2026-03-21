@@ -24,3 +24,6 @@ UI_TIMER_INTERVAL_MS = 80
 
 # File path for storing algae biosensor records
 CSV_PATH = "records_as7341_algae.csv"
+
+# File path for persisting app settings (e.g. last used serial port)
+SETTINGS_PATH = "app_settings.json"

@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['main.py'],
+    ['../main.py'],
     pathex=[],
     binaries=[],
-    datas=[('logo.png', '.')],
+    datas=[('../logo.png', '.')],
     hiddenimports=['services', 'ui'],
     hookspath=[],
     hooksconfig={},
