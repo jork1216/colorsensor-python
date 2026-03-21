@@ -1,10 +1,11 @@
+import json
 import time
 from datetime import datetime
 
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 
-from config import SNAPSHOT_INTERVAL_SECONDS, SERIAL_FLUSH_SECONDS, CSV_PATH
+from config import SNAPSHOT_INTERVAL_SECONDS, SERIAL_FLUSH_SECONDS, CSV_PATH, SETTINGS_PATH
 from models import AS_COLS
 from metrics import compute_all_indices, evaluate_against_baseline
 from storage import append_row
@@ -35,6 +36,23 @@ class SessionController(QObject):
         self.state.baseline_indices = compute_all_indices(self.state.last_pkt)
         self.state.baseline_time = datetime.now()
 
+        # Save baseline to app_settings.json
+        try:
+            settings = {}
+            try:
+                with open(SETTINGS_PATH, "r") as f:
+                    settings = json.load(f)
+            except FileNotFoundError:
+                pass
+            
+            settings["baseline_pkt"] = self.state.baseline_pkt
+            settings["baseline_time"] = self.state.baseline_time.isoformat()
+            
+            with open(SETTINGS_PATH, "w") as f:
+                json.dump(settings, f)
+        except Exception:
+            pass
+
         timestamp_string = self.state.baseline_time.strftime("%Y-%m-%d %H:%M:%S")
         self.baseline_captured.emit(self.state.baseline_indices, timestamp_string)
 
@@ -42,6 +60,24 @@ class SessionController(QObject):
         self.state.baseline_pkt = None
         self.state.baseline_indices = None
         self.state.baseline_time = None
+
+        # Remove baseline keys from app_settings.json
+        try:
+            settings = {}
+            try:
+                with open(SETTINGS_PATH, "r") as f:
+                    settings = json.load(f)
+            except FileNotFoundError:
+                pass
+            
+            settings.pop("baseline_pkt", None)
+            settings.pop("baseline_time", None)
+            
+            with open(SETTINGS_PATH, "w") as f:
+                json.dump(settings, f)
+        except Exception:
+            pass
+
         self.baseline_cleared.emit()
 
     def start_recording(self, duration_seconds, snapshot_interval_seconds=None):

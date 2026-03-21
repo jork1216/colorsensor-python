@@ -1,3 +1,5 @@
+import json
+
 from PySide6.QtCore import QTimer, Qt, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -7,11 +9,12 @@ from PySide6.QtWidgets import (
     QTabWidget,
 )
 
-from config import CSV_PATH, UI_TIMER_INTERVAL_MS
+from config import CSV_PATH, UI_TIMER_INTERVAL_MS, SETTINGS_PATH
 from models import AppState
 from storage import ensure_csv_schema
 from serial_reader import SerialReader
 from session_controller import SessionController
+from metrics import compute_all_indices
 from widgets.title_bar import TitleBar
 from tabs.live_tab import LiveTab
 from tabs.records_tab import RecordsTab
@@ -27,6 +30,21 @@ class MainWindow(QMainWindow):
         self.setWindowFlags(Qt.FramelessWindowHint)
 
         self.state = AppState()
+        
+        # Restore baseline from app_settings.json if it exists
+        try:
+            with open(SETTINGS_PATH, "r") as f:
+                settings = json.load(f)
+                if "baseline_pkt" in settings and "baseline_time" in settings:
+                    from datetime import datetime
+                    self.state.baseline_pkt = settings["baseline_pkt"]
+                    self.state.baseline_time = datetime.fromisoformat(settings["baseline_time"])
+                    self.state.baseline_indices = compute_all_indices(self.state.baseline_pkt)
+        except FileNotFoundError:
+            pass
+        except Exception:
+            pass
+        
         ensure_csv_schema(CSV_PATH)
 
         self.reader = SerialReader()
@@ -61,6 +79,11 @@ class MainWindow(QMainWindow):
         self.controller.baseline_cleared.connect(self.live_tab.on_baseline_cleared)
         self.reader.disconnected.connect(self.controller.on_serial_disconnected)
         self.controller.recording_aborted.connect(self.on_recording_aborted)
+
+        # Emit baseline_captured signal if baseline was restored
+        if self.state.baseline_pkt and self.state.baseline_indices and self.state.baseline_time:
+            timestamp_string = self.state.baseline_time.strftime("%Y-%m-%d %H:%M:%S")
+            self.controller.baseline_captured.emit(self.state.baseline_indices, timestamp_string)
 
         self.ui_timer = QTimer()
         self.ui_timer.setInterval(UI_TIMER_INTERVAL_MS)
