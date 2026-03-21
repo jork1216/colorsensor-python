@@ -108,6 +108,7 @@ class LiveTab(QWidget):
         self.btn_stop_record = QPushButton("Stop Recording")
         self.timer_label = QLabel("Remaining: —")
         self.timer_label.setStyleSheet("font-weight:700; color: white;")
+        self.timer_label.hide()
 
         self._rec_blink_timer = QTimer(self)
         self._rec_blink_timer.setInterval(600)
@@ -130,8 +131,7 @@ class LiveTab(QWidget):
         grid.addWidget(self.snapshot_spin, 1, 3)
         grid.addWidget(self.btn_start_record, 1, 4)
         grid.addWidget(self.btn_stop_record, 1, 5)
-        grid.addWidget(self.timer_label, 1, 6)
-        grid.addWidget(self.btn_reset_live, 1, 7)
+        grid.addWidget(self.btn_reset_live, 1, 6)
 
         self.btn_capture_base.clicked.connect(lambda: self.controller.capture_baseline())
         self.btn_clear_base.clicked.connect(lambda: self.controller.clear_baseline())
@@ -245,6 +245,7 @@ class LiveTab(QWidget):
 
         history_header.addWidget(history_title)
         history_header.addWidget(self.rec_indicator)
+        history_header.addWidget(self.timer_label)
         history_header.addStretch()
         history_header.addWidget(self.live_history_count)
 
@@ -397,6 +398,7 @@ class LiveTab(QWidget):
         dur_minutes = int(self.duration_spin.value())
         self.timer_label.setText(f"Remaining: {dur_minutes}m 0s (recording)")
         self.timer_label.setStyleSheet("font-weight:900;color:white;")
+        self.timer_label.show()
         self.btn_stop_record.setEnabled(True)
         self.rec_indicator.show()
         self._rec_blink_timer.start()
@@ -406,6 +408,7 @@ class LiveTab(QWidget):
         self.rec_indicator.hide()
         self.timer_label.setText("Remaining: —")
         self.timer_label.setStyleSheet("font-weight:700; color: white;")
+        self.timer_label.hide()
         self.btn_stop_record.setEnabled(False)
         
         if session_id:
