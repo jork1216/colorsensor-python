@@ -109,7 +109,8 @@ class HistoryTable(QTableWidget):
         return "#6ee7b7" if float(value) >= 0 else "#f87171"
 
     def add_live_history_row(self, timestamp_str, overall, cur, delta, count_label):
-        self.insertRow(0)
+        self.insertRow(self.rowCount())
+        last_row = self.rowCount() - 1
 
         fg, bg = self.status_cell_style(overall)
 
@@ -128,12 +129,13 @@ class HistoryTable(QTableWidget):
         ]
 
         for col, item in enumerate(values):
-            self.setItem(0, col, item)
+            self.setItem(last_row, col, item)
 
         if self.rowCount() > 100:  # Default limit, can be made configurable if needed
-            self.removeRow(self.rowCount() - 1)
+            self.removeRow(0)
 
         count_label.setText(f"{self.rowCount()} snaps recorded")
+        self.scrollToBottom()
 
     def populate_records_history_table(self, sdf: pd.DataFrame, count_label):
         self.setRowCount(0)
@@ -142,7 +144,7 @@ class HistoryTable(QTableWidget):
             count_label.setText("0 snaps recorded")
             return
 
-        for _, row in sdf.sort_values("time", ascending=False).iterrows():
+        for _, row in sdf.sort_values("time", ascending=True).iterrows():
             r = self.rowCount()
             self.insertRow(r)
 

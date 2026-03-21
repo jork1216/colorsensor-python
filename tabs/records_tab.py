@@ -1,3 +1,4 @@
+import re
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
@@ -266,9 +267,27 @@ class RecordsTab(QWidget):
             QMessageBox.critical(self, "Error", "Session has no data.")
             return
 
-        # Open save dialog
+        # Extract session name from last row and clean for filename
+        session_name = str(sdf["session_name"].iloc[-1]).strip()
+        
+        # Replace invalid filesystem characters with underscore
+        invalid_chars = r'[\\/:"*?<>|]'
+        clean_name = re.sub(invalid_chars, '_', session_name)
+        
+        # Fall back to session ID if cleaned name is empty or was "Unnamed"
+        if not clean_name or session_name == "Unnamed":
+            clean_name = str(sid)
+        
+        # Pre-fill the save dialog with the cleaned session name
+        from pathlib import Path
+        excel_folder = Path(__file__).parent.parent / "excel"
+        excel_folder.mkdir(exist_ok=True)
+        default_filename = f"{clean_name}.xlsx"
+        default_path = str(excel_folder / default_filename)
+
+        # Open save dialog with default filename and location
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Export Session", "", "Excel Files (*.xlsx)"
+            self, "Export Session", default_path, "Excel Files (*.xlsx)"
         )
         if not file_path:
             return
@@ -277,15 +296,6 @@ class RecordsTab(QWidget):
             # Define columns for Session Data sheet
             session_data_cols = [
                 "time",
-                "F1",
-                "F2",
-                "F3",
-                "F4",
-                "F5",
-                "F6",
-                "F7",
-                "F8",
-                "CLR",
                 "chlorophyll_index",
                 "chlorophyll_index_delta_pct",
                 "car_chl_ratio",
@@ -415,8 +425,9 @@ class RecordsTab(QWidget):
             first_row = sdf.iloc[0]
             last_row = sdf.iloc[-1]
 
-            # Extract session info
-            session_name = str(first_row.get("session_name", "Unnamed")).strip() or "Unnamed"
+            # Extract session info (use the cleaned name from earlier)
+            # or re-extract it here to ensure consistency
+            session_name_for_summary = str(last_row.get("session_name", "Unnamed")).strip() or "Unnamed"
             start_time = first_row["time"]
             end_time = last_row["time"]
             count = len(sdf)
@@ -424,7 +435,7 @@ class RecordsTab(QWidget):
             # Row 1: Session name (merged A1:B1)
             ws_summary.merge_cells("A1:B1")
             cell_name = ws_summary["A1"]
-            cell_name.value = session_name
+            cell_name.value = session_name_for_summary
             cell_name.font = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
             cell_name.fill = PatternFill(
                 start_color="281C59", end_color="281C59", fill_type="solid"
