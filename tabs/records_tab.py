@@ -1,6 +1,9 @@
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
 
 from PySide6.QtWidgets import (
     QWidget,
@@ -107,6 +110,24 @@ class RecordsTab(QWidget):
 
     def _colored_label(self, text: str, color_hex: str) -> str:
         return f'<span style="color:{color_hex}; font-weight:700;">{text}</span>'
+
+    def _autofit_columns(self, ws):
+        """Auto-fit column widths based on the longest content in each column.
+        
+        Args:
+            ws: openpyxl worksheet to auto-fit columns for
+        """
+        for col_idx, col in enumerate(ws.iter_cols(), 1):
+            max_length = 0
+            col_letter = get_column_letter(col_idx)
+            
+            for cell in col:
+                if cell.value:
+                    cell_length = len(str(cell.value))
+                    max_length = max(max_length, cell_length)
+            
+            adjusted_width = min(max_length + 4, 50)
+            ws.column_dimensions[col_letter].width = adjusted_width
 
     def refresh_sessions(self):
         df = load_records_df(CSV_PATH)
@@ -253,8 +274,18 @@ class RecordsTab(QWidget):
             return
 
         try:
-            # Prepare data for sheets
-            index_cols = [
+            # Define columns for Session Data sheet
+            session_data_cols = [
+                "time",
+                "F1",
+                "F2",
+                "F3",
+                "F4",
+                "F5",
+                "F6",
+                "F7",
+                "F8",
+                "CLR",
                 "chlorophyll_index",
                 "chlorophyll_index_delta_pct",
                 "car_chl_ratio",
@@ -263,33 +294,306 @@ class RecordsTab(QWidget):
                 "yellow_index_delta_pct",
                 "stress_ratio",
                 "stress_ratio_delta_pct",
+                "overall_status",
             ]
-            session_data_cols = ["time"] + index_cols + ["overall_status"]
-            session_data = sdf[session_data_cols].copy()
 
-            # Prepare summary data (first and last rows)
-            first_row = sdf[session_data_cols].iloc[0].copy()
-            last_row = sdf[session_data_cols].iloc[-1].copy()
+            # Filter to only include columns that exist in the dataframe
+            available_cols = [col for col in session_data_cols if col in sdf.columns]
+            session_data = sdf[available_cols].copy()
 
-            summary_data = pd.DataFrame(
-                [
-                    {"type": "Baseline", **first_row.to_dict()},
-                    {"type": "Final", **last_row.to_dict()},
-                ]
+            # Create workbook and worksheets
+            wb = Workbook()
+            ws_session = wb.active
+            ws_session.title = "Session Data"
+            ws_summary = wb.create_sheet("Summary")
+
+            # ============ Session Data Sheet ============
+
+            # Write header row
+            for col_idx, col_name in enumerate(available_cols, 1):
+                cell = ws_session.cell(row=1, column=col_idx)
+                cell.value = col_name
+                cell.font = Font(
+                    name="Calibri", size=11, bold=True, color="FFFFFF"
+                )
+                cell.fill = PatternFill(start_color="281C59", end_color="281C59", fill_type="solid")
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            # Write data rows with banded formatting and status color coding
+            color_1 = "1e1650"
+            color_2 = "2d2070"
+            status_colors = {
+                "Healthy": {"fill": "052e16", "text": "86efac"},
+                "Mild stress": {"fill": "3f2a06", "text": "fde047"},
+                "Stressed": {"fill": "3f1113", "text": "f87171"},
+            }
+
+            for row_idx, (_, row_data) in enumerate(session_data.iterrows(), 2):
+                # Determine banded row color
+                band_color = color_1 if (row_idx - 2) % 2 == 0 else color_2
+
+                for col_idx, col_name in enumerate(available_cols, 1):
+                    cell = ws_session.cell(row=row_idx, column=col_idx)
+                    value = row_data[col_name]
+
+                    # Format datetime
+                    if pd.api.types.is_datetime64_any_dtype(type(value)):
+                        cell.value = value
+                        cell.number_format = "YYYY-MM-DD HH:MM:SS"
+                    else:
+                        cell.value = value
+
+                    cell.font = Font(name="Calibri", size=10, color="FFFFFF")
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+
+                    # Apply status color coding to overall_status column
+                    if col_name == "overall_status":
+                        status = str(value).strip()
+                        if status in status_colors:
+                            config = status_colors[status]
+                            cell.fill = PatternFill(
+                                start_color=config["fill"],
+                                end_color=config["fill"],
+                                fill_type="solid",
+                            )
+                            cell.font = Font(
+                                name="Calibri", size=10, bold=True, color=config["text"]
+                            )
+                        else:
+                            cell.fill = PatternFill(
+                                start_color=band_color,
+                                end_color=band_color,
+                                fill_type="solid",
+                            )
+                    else:
+                        # Apply banded row color
+                        cell.fill = PatternFill(
+                            start_color=band_color,
+                            end_color=band_color,
+                            fill_type="solid",
+                        )
+
+            # Apply conditional formatting to delta percentage columns
+            delta_cols = [
+                "chlorophyll_index_delta_pct",
+                "car_chl_ratio_delta_pct",
+                "yellow_index_delta_pct",
+                "stress_ratio_delta_pct",
+            ]
+            for col_idx, col_name in enumerate(available_cols, 1):
+                if col_name in delta_cols:
+                    for row_idx in range(2, ws_session.max_row + 1):
+                        cell = ws_session.cell(row=row_idx, column=col_idx)
+                        value = cell.value
+
+                        # Get current fill color to preserve it
+                        current_fill = cell.fill
+
+                        # Check if value is NaN or None
+                        if value is None or (isinstance(value, float) and pd.isna(value)):
+                            cell.value = "—"
+                            cell.font = Font(name="Calibri", size=10, color="9ca3af")
+                        else:
+                            try:
+                                num_value = float(value)
+                                if num_value >= 0:
+                                    cell.font = Font(name="Calibri", size=10, color="6ee7b7")
+                                else:
+                                    cell.font = Font(name="Calibri", size=10, color="f87171")
+                            except (ValueError, TypeError):
+                                cell.font = Font(name="Calibri", size=10, color="9ca3af")
+
+            # Auto-fit columns in Session Data sheet
+            self._autofit_columns(ws_session)
+
+            # Freeze panes (freeze row 1)
+            ws_session.freeze_panes = "A2"
+
+            # ============ Summary Sheet ============
+
+            # Get first and last rows
+            first_row = sdf.iloc[0]
+            last_row = sdf.iloc[-1]
+
+            # Extract session info
+            session_name = str(first_row.get("session_name", "Unnamed")).strip() or "Unnamed"
+            start_time = first_row["time"]
+            end_time = last_row["time"]
+            count = len(sdf)
+
+            # Row 1: Session name (merged A1:B1)
+            ws_summary.merge_cells("A1:B1")
+            cell_name = ws_summary["A1"]
+            cell_name.value = session_name
+            cell_name.font = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
+            cell_name.fill = PatternFill(
+                start_color="281C59", end_color="281C59", fill_type="solid"
             )
+            cell_name.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-            # Write Excel file with two sheets
-            with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
-                session_data.to_excel(writer, sheet_name="Session Data", index=False)
-                summary_data.to_excel(writer, sheet_name="Summary", index=False)
+            # Row 2: Recording info (merged A2:B2)
+            ws_summary.merge_cells("A2:B2")
+            cell_info = ws_summary["A2"]
+            cell_info.value = f"Recorded: {start_time:%Y-%m-%d %I:%M:%S %p} → {end_time:%I:%M:%S %p}  |  {count} snapshots"
+            cell_info.font = Font(name="Calibri", size=10, color="9ca3af")
+            cell_info.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+            # Row 3: Blank spacer
+
+            # Row 4: Baseline header
+            ws_summary.cell(row=4, column=1).value = "Metric"
+            ws_summary.cell(row=4, column=2).value = "Baseline Value"
+            for col_idx in [1, 2]:
+                cell = ws_summary.cell(row=4, column=col_idx)
+                cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+                cell.fill = PatternFill(
+                    start_color="281C59", end_color="281C59", fill_type="solid"
+                )
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            # Rows 5–8: Baseline metrics
+            metrics_baseline = [
+                ("Chlorophyll Index", "chlorophyll_index"),
+                ("CAR:CHL Ratio", "car_chl_ratio"),
+                ("Yellow Index", "yellow_index"),
+                ("Stress Ratio", "stress_ratio"),
+            ]
+            for row_offset, (metric_label, metric_col) in enumerate(metrics_baseline, 5):
+                # Metric name
+                cell_metric = ws_summary.cell(row=row_offset, column=1)
+                cell_metric.value = metric_label
+                cell_metric.font = Font(name="Calibri", size=10, color="FFFFFF")
+                cell_metric.fill = PatternFill(
+                    start_color=color_1, end_color=color_1, fill_type="solid"
+                )
+                cell_metric.alignment = Alignment(horizontal="left", vertical="center")
+
+                # Value
+                cell_value = ws_summary.cell(row=row_offset, column=2)
+                if metric_col in first_row.index:
+                    try:
+                        cell_value.value = float(first_row[metric_col])
+                        cell_value.number_format = "0.0000"
+                    except (ValueError, TypeError):
+                        cell_value.value = first_row[metric_col]
+                else:
+                    cell_value.value = "N/A"
+                cell_value.font = Font(name="Calibri", size=10, color="FFFFFF")
+                cell_value.fill = PatternFill(
+                    start_color=color_1, end_color=color_1, fill_type="solid"
+                )
+                cell_value.alignment = Alignment(horizontal="center", vertical="center")
+
+            # Row 9: Blank spacer
+
+            # Row 10: Final header
+            ws_summary.cell(row=10, column=1).value = "Metric"
+            ws_summary.cell(row=10, column=2).value = "Final Value"
+            ws_summary.cell(row=10, column=3).value = "Delta %"
+            ws_summary.cell(row=10, column=4).value = "Status"
+            for col_idx in [1, 2, 3, 4]:
+                cell = ws_summary.cell(row=10, column=col_idx)
+                cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+                cell.fill = PatternFill(
+                    start_color="281C59", end_color="281C59", fill_type="solid"
+                )
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            # Rows 11–14: Final metrics with color-coded status
+            metrics_final = [
+                ("Chlorophyll Index", "chlorophyll_index", "chlorophyll_index_delta_pct", "chlorophyll_index_status"),
+                ("CAR:CHL Ratio", "car_chl_ratio", "car_chl_ratio_delta_pct", "car_chl_ratio_status"),
+                ("Yellow Index", "yellow_index", "yellow_index_delta_pct", "yellow_index_status"),
+                ("Stress Ratio", "stress_ratio", "stress_ratio_delta_pct", "stress_ratio_status"),
+            ]
+            for row_offset, (metric_label, metric_col, delta_col, status_col) in enumerate(metrics_final, 11):
+                # Metric name
+                cell_metric = ws_summary.cell(row=row_offset, column=1)
+                cell_metric.value = metric_label
+                cell_metric.font = Font(name="Calibri", size=10, color="FFFFFF")
+                cell_metric.fill = PatternFill(
+                    start_color=color_2, end_color=color_2, fill_type="solid"
+                )
+                cell_metric.alignment = Alignment(horizontal="left", vertical="center")
+
+                # Final value
+                cell_final = ws_summary.cell(row=row_offset, column=2)
+                if metric_col in last_row.index:
+                    try:
+                        cell_final.value = float(last_row[metric_col])
+                        cell_final.number_format = "0.0000"
+                    except (ValueError, TypeError):
+                        cell_final.value = last_row[metric_col]
+                else:
+                    cell_final.value = "N/A"
+                cell_final.font = Font(name="Calibri", size=10, color="FFFFFF")
+                cell_final.fill = PatternFill(
+                    start_color=color_2, end_color=color_2, fill_type="solid"
+                )
+                cell_final.alignment = Alignment(horizontal="center", vertical="center")
+
+                # Delta %
+                cell_delta = ws_summary.cell(row=row_offset, column=3)
+                if delta_col in last_row.index:
+                    try:
+                        cell_delta.value = float(last_row[delta_col])
+                        cell_delta.number_format = "0.00"
+                    except (ValueError, TypeError):
+                        cell_delta.value = last_row[delta_col]
+                else:
+                    cell_delta.value = "N/A"
+                cell_delta.font = Font(name="Calibri", size=10, color="FFFFFF")
+                cell_delta.fill = PatternFill(
+                    start_color=color_2, end_color=color_2, fill_type="solid"
+                )
+                cell_delta.alignment = Alignment(horizontal="center", vertical="center")
+
+                # Status with color coding
+                cell_status = ws_summary.cell(row=row_offset, column=4)
+                status_text = str(last_row.get(status_col, "Unknown")).strip() if status_col in last_row.index else "Unknown"
+                cell_status.value = status_text
+                cell_status.font = Font(name="Calibri", size=10, color="FFFFFF", bold=True)
+                cell_status.alignment = Alignment(horizontal="center", vertical="center")
+
+                # Map status names to colors (normalize status text)
+                status_normalized = status_text.lower()
+                if "healthy" in status_normalized:
+                    cell_status.fill = PatternFill(
+                        start_color="052e16", end_color="052e16", fill_type="solid"
+                    )
+                    cell_status.font = Font(name="Calibri", size=10, bold=True, color="86efac")
+                elif "mild" in status_normalized or "mild stress" in status_normalized:
+                    cell_status.fill = PatternFill(
+                        start_color="3f2a06", end_color="3f2a06", fill_type="solid"
+                    )
+                    cell_status.font = Font(name="Calibri", size=10, bold=True, color="fde047")
+                elif "stress" in status_normalized:
+                    cell_status.fill = PatternFill(
+                        start_color="3f1113", end_color="3f1113", fill_type="solid"
+                    )
+                    cell_status.font = Font(name="Calibri", size=10, bold=True, color="f87171")
+                else:
+                    cell_status.fill = PatternFill(
+                        start_color=color_2, end_color=color_2, fill_type="solid"
+                    )
+
+            # Auto-fit columns in Summary sheet
+            self._autofit_columns(ws_summary)
+
+            # Set row heights for merged cells
+            ws_summary.row_dimensions[1].height = 25
+            ws_summary.row_dimensions[2].height = 20
+
+            # Save the workbook
+            wb.save(file_path)
 
             QMessageBox.information(
                 self,
                 "Export Successful",
-                f"Session exported successfully to:\n{file_path}",
+                f"Saved to:\n{file_path}",
             )
         except Exception as e:
             QMessageBox.critical(
-                self, "Export Failed", f"Failed to export session:\n{str(e)}"
+                self, "Export Failed", f"Failed to export:\n{str(e)}"
             )
 
